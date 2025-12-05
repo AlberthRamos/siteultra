@@ -1,0 +1,275 @@
+/**
+ * REPORT ENGINE - Especificação Técnica
+ * Service: svc-tax-engine
+ * Responsável por: Parser de dados Verot, cálculos tributários, geração de relatórios
+ */
+
+// ============================================================================
+// 1. FORMATO DE ENTRADA (Excel exportado do Verot)
+// ============================================================================
+// 
+// O Verot (SpedAdvisor) exporta relatórios em formato Excel (.xlsx, .xls, .csv)
+// Este arquivo Excel é importado via upload e parseado para o formato VerotInputData
+// 
+// Formatos suportados:
+// - .xlsx (Excel 2007+)
+// - .xls (Excel 97-2003)
+// - .csv (valores separados por vírgula)
+//
+// A interface VerotInputData abaixo representa o formato INTERNO após parsing do Excel
+
+export interface VerotInputData {
+  empresa: {
+    cnpj: string;
+    razaoSocial: string;
+    periodo: {
+      inicio: string; // ISO date
+      fim: string;
+    };
+  };
+  tributos: {
+    pis: TributoDetalhes;
+    cofins: TributoDetalhes;
+    icms: TributoDetalhes;
+    irpj: TributoDetalhes;
+    csll: TributoDetalhes;
+  };
+  creditos: {
+    identificados: CreditoItem[];
+    potenciais: CreditoItem[];
+  };
+}
+
+interface TributoDetalhes {
+  valorPago: number;
+  valorDevido: number;
+  diferencaRecuperavel: number;
+  percentualBase: number;
+}
+
+interface CreditoItem {
+  tipo: string; // ex: "ICMS na base PIS/COFINS"
+  descricao: string;
+  valorEstimado: number;
+  fundamentacaoLegal: string;
+  complexidade: 'baixa' | 'media' | 'alta';
+}
+
+// ============================================================================
+// 2. ALGORITMOS DE CÁLCULO
+// ============================================================================
+
+/**
+ * Calcula o valor total recuperável somando todos os créditos identificados
+ */
+export function calcularValorRecuperavel(data: VerotInputData): number {
+  const creditosIdentificados = data.creditos.identificados.reduce(
+    (acc, item) => acc + item.valorEstimado,
+    0
+  );
+  
+  const diferencasTributarias = Object.values(data.tributos).reduce(
+    (acc, tributo) => acc + tributo.diferencaRecuperavel,
+    0
+  );
+  
+  return creditosIdentificados + diferencasTributarias;
+}
+
+/**
+ * Calcula o percentual de economia em relação ao total pago
+ */
+export function calcularPercentualEconomia(data: VerotInputData): number {
+  const totalPago = Object.values(data.tributos).reduce(
+    (acc, tributo) => acc + tributo.valorPago,
+    0
+  );
+  
+  const valorRecuperavel = calcularValorRecuperavel(data);
+  
+  return totalPago > 0 ? (valorRecuperavel / totalPago) * 100 : 0;
+}
+
+/**
+ * Gera distribuição tributária para gráfico de pizza
+ */
+export function gerarDistribuicaoTributaria(data: VerotInputData): ChartData[] {
+  return Object.entries(data.tributos).map(([nome, detalhes]) => ({
+    name: nome.toUpperCase(),
+    value: detalhes.valorPago,
+    color: getTributoColor(nome),
+  }));
+}
+
+function getTributoColor(tributo: string): string {
+  const colors: Record<string, string> = {
+    pis: '#00f2ff',      // Neon Blue (Brand)
+    cofins: '#7c3aed',   // Purple
+    icms: '#f59e0b',     // Amber
+    irpj: '#10b981',     // Emerald
+    csll: '#ef4444',     // Red
+  };
+  return colors[tributo] || '#6b7280';
+}
+
+// ============================================================================
+// 3. FORMATO DE SAÍDA (Dashboard JSON)
+// ============================================================================
+
+export interface FirstAnalysisReport {
+  metadata: {
+    cnpj: string;
+    razaoSocial: string;
+    periodoAnalise: string;
+    dataGeracao: string;
+  };
+  kpis: {
+    valorRecuperavel: number;
+    percentualEconomia: number;
+    totalTributosPagos: number;
+    quantidadeCreditosIdentificados: number;
+  };
+  charts: {
+    distribuicaoTributaria: ChartData[];
+    economiaEstimada: BarChartData[];
+    timelineRecuperacao: TimelineData[];
+  };
+  creditos: {
+    identificados: CreditoItem[];
+    potenciais: CreditoItem[];
+  };
+  recomendacoes: string[];
+}
+
+interface ChartData {
+  name: string;
+  value: number;
+  color: string;
+}
+
+interface BarChartData {
+  categoria: string;
+  valorPago: number;
+  valorRecuperavel: number;
+}
+
+interface TimelineData {
+  mes: string;
+  acumulado: number;
+}
+
+// ============================================================================
+// 4. LÓGICA DE NEGÓCIO (baseada em UltraTax.rag)
+// ============================================================================
+
+/**
+ * Identifica oportunidades de crédito com base em regras fiscais
+ * Fonte: Documentos Verot em UltraTax.rag
+ */
+export function identificarOportunidades(data: VerotInputData): CreditoItem[] {
+  const oportunidades: CreditoItem[] = [];
+  
+  // Regra 1: ICMS na base de PIS/COFINS
+  if (data.tributos.pis.valorPago > 0 && data.tributos.icms.valorPago > 0) {
+    const valorEstimado = data.tributos.icms.valorPago * 0.0965; // 9.65% (PIS+COFINS)
+    oportunidades.push({
+      tipo: 'ICMS_BASE_PIS_COFINS',
+      descricao: 'Exclusão do ICMS da base de cálculo de PIS/COFINS',
+      valorEstimado,
+      fundamentacaoLegal: 'RE 574.706 (Tema 69 STF)',
+      complexidade: 'media',
+    });
+  }
+  
+  // Regra 2: Créditos de PIS/COFINS sobre insumos
+  // (Adicionar mais regras conforme UltraTax.rag)
+  
+  return oportunidades;
+}
+
+// ============================================================================
+// 5. MOCK DATA (para testes)
+// ============================================================================
+
+export const MOCK_VEROT_DATA: VerotInputData = {
+  empresa: {
+    cnpj: '12.345.678/0001-90',
+    razaoSocial: 'Empresa Exemplo LTDA',
+    periodo: {
+      inicio: '2023-01-01',
+      fim: '2023-12-31',
+    },
+  },
+  tributos: {
+    pis: {
+      valorPago: 150000,
+      valorDevido: 140000,
+      diferencaRecuperavel: 10000,
+      percentualBase: 1.65,
+    },
+    cofins: {
+      valorPago: 690000,
+      valorDevido: 650000,
+      diferencaRecuperavel: 40000,
+      percentualBase: 7.6,
+    },
+    icms: {
+      valorPago: 850000,
+      valorDevido: 850000,
+      diferencaRecuperavel: 0,
+      percentualBase: 18,
+    },
+    irpj: {
+      valorPago: 320000,
+      valorDevido: 300000,
+      diferencaRecuperavel: 20000,
+      percentualBase: 15,
+    },
+    csll: {
+      valorPago: 180000,
+      valorDevido: 175000,
+      diferencaRecuperavel: 5000,
+      percentualBase: 9,
+    },
+  },
+  creditos: {
+    identificados: [
+      {
+        tipo: 'ICMS_BASE_PIS_COFINS',
+        descricao: 'Exclusão do ICMS da base de cálculo de PIS/COFINS',
+        valorEstimado: 82025,
+        fundamentacaoLegal: 'RE 574.706',
+        complexidade: 'media',
+      },
+    ],
+    potenciais: [
+      {
+        tipo: 'CREDITO_INSUMOS',
+        descricao: 'Créditos de PIS/COFINS sobre insumos',
+        valorEstimado: 45000,
+        fundamentacaoLegal: 'Lei 10.833/2003',
+        complexidade: 'alta',
+      },
+    ],
+  },
+};
+
+// ============================================================================
+// 6. ENDPOINT PRINCIPAL
+// ============================================================================
+
+/**
+ * POST /tax/analyze
+ * 
+ * Input: VerotInputData (JSON)
+ * Output: FirstAnalysisReport
+ * 
+ * Fluxo:
+ * 1. Validar dados de entrada
+ * 2. Executar algoritmos de cálculo
+ * 3. Identificar oportunidades adicionais
+ * 4. Gerar dados para charts
+ * 5. Compilar relatório final
+ * 6. Salvar no banco (PostgreSQL)
+ * 7. Retornar JSON para frontend
+ */

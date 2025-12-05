@@ -1,0 +1,359 @@
+```
+/**
+ * SECURITY RULES - Especificação Técnica Completa
+ * Middleware: Next.js Edge Middleware
+ * Services: svc-auth
+ */
+
+// ============================================================================
+// 1. RBAC (Role-Based Access Control)
+// ============================================================================
+
+export const ACCESS_RULES = {
+  CRM: {
+    allowed_roles: ['master_admin'],
+    redirect_fail: '/login?error=unauthorized',
+    block_external_ips: true, // Opcional - ver IP_WHITELIST abaixo
+    obfuscated_route: '/sys_8x9_core', // Rota não-óbvia
+  },
+  FIRST_ANALYSIS: {
+    allowed_roles: ['lead_viewer', 'client', 'master_admin'],
+    view_mode: 'readonly',
+    temp_access: true, // Permite acesso via token temporário
+  },
+  AUDIT_TRACKER: {
+    allowed_roles: ['client', 'auditor', 'master_admin'],
+    features: {
+      update_step: ['auditor', 'master_admin'],
+      view_step: ['client', 'auditor', 'master_admin'],
+      upload_document: ['client', 'auditor', 'master_admin'],
+    },
+  },
+  SECURITY_SERVICES: {
+    allowed_roles: ['client', 'master_admin'],
+    feature_flag: 'hasSecurityContract', // Verifica no token
+    fallback_mode: 'placeholder', // Mostra cards com blur
+  },
+};
+
+// ============================================================================
+// 2. IP WHITELIST (Proteção do CRM)
+// ============================================================================
+
+/**
+ * Lista de IPs autorizados a acessar o CRM
+ * Configurável via variável de ambiente: ALLOWED_IPS="192.168.1.1,203.0.113.5"
+ */
+export const IP_WHITELIST = {
+  enabled: process.env.ENABLE_IP_WHITELIST === 'true',
+  allowedIps: process.env.ALLOWED_IPS?.split(',') || [],
+  
+  /**
+   * Verifica se o IP do request está na whitelist
+   */
+  isAllowed(ip: string): boolean {
+    if (!this.enabled) return true;
+    return this.allowedIps.includes(ip);
+  },
+  
+  /**
+   * Extrai IP real do request (considerando proxies)
+   */
+  getRealIp(request: Request): string {
+    const forwarded = request.headers.get('x-forwarded-for');
+    const realIp = request.headers.get('x-real-ip');
+    
+    if (forwarded) {
+      return forwarded.split(',')[0].trim();
+    }
+    
+    if (realIp) {
+      return realIp;
+    }
+    
+    // Fallback (não confiável em produção)
+    return 'unknown';
+  },
+};
+
+// ============================================================================
+// 3. TOKENS TEMPORÁRIOS (Acesso para Leads)
+// ============================================================================
+
+/**
+ * Sistema de tokens temporários para dar acesso limitado a leads
+ * 
+ * Fluxo:
+ * 1. Master Admin cria lead no CRM
+ * 2. Sistema gera token JWT com expiração de 7 dias
+ * 3. Link é enviado ao lead: /portal/dashboard?token=xxx
+ * 4. Lead acessa dashboard sem criar conta
+ * 5. Após 7 dias, token expira automaticamente
+ */
+
+export interface TempAccessToken {
+  type: 'temp_access';
+  leadId: string;
+  allowedRoutes: string[]; // ex: ['/portal/dashboard']
+  expiresAt: number; // Unix timestamp
+  createdBy: string; // User ID do master_admin
+}
+
+export const TEMP_TOKEN_CONFIG = {
+  expirationDays: 7,
+  secretKey: process.env.TEMP_TOKEN_SECRET, // Diferente do NEXTAUTH_SECRET
+  
+  /**
+   * Gera token temporário (executado no svc-auth)
+   */
+  generate(leadId: string, createdBy: string): string {
+    const jwt = require('jsonwebtoken');
+    
+    const payload: TempAccessToken = {
+      type: 'temp_access',
+      leadId,
+      allowedRoutes: ['/portal/dashboard'],
+      expiresAt: Date.now() + this.expirationDays * 24 * 60 * 60 * 1000,
+      createdBy,
+    };
+    
+    return jwt.sign(payload, this.secretKey, {
+      expiresIn: `${this.expirationDays}d`,
+    });
+  },
+  
+  /**
+   * Valida token temporário (executado no middleware)
+   */
+  verify(token: string): TempAccessToken | null {
+    const jwt = require('jsonwebtoken');
+    
+    try {
+      const decoded = jwt.verify(token, this.secretKey) as TempAccessToken;
+      
+      // Verificar se expirou
+      if (decoded.expiresAt < Date.now()) {
+        return null;
+      }
+      
+      return decoded;
+    } catch (error) {
+      return null;
+    }
+  },
+};
+
+// ============================================================================
+// 4. ANTI-MAPPING STRATEGIES
+// ============================================================================
+
+/**
+ * Estratégias para dificultar mapeamento da aplicação por bots/scanners
+ */
+
+export const ANTI_MAPPING = {
+  /**
+   * Rotas que devem retornar 404 mesmo se existirem
+   * (para esconder endpoints administrativos)
+   */
+  hiddenRoutes: [
+    '/admin',
+    '/administrator',
+    '/wp-admin',
+    '/phpmyadmin',
+    '/api/admin',
+  ],
+  
+  /**
+   * User-Agents suspeitos que devem ser bloqueados
+   */
+  blockedUserAgents: [
+    'sqlmap',
+    'nikto',
+    'nmap',
+    'masscan',
+    'acunetix',
+  ],
+  
+  /**
+   * Rate limiting agressivo para rotas sensíveis
+   */
+  rateLimits: {
+    '/login': { max: 5, windowMs: 15 * 60 * 1000 }, // 5 tentativas em 15min
+    '/sys_8x9_core': { max: 10, windowMs: 60 * 1000 }, // 10 requests por minuto
+  },
+  
+  /**
+   * Verifica se o request é suspeito
+   */
+  isSuspicious(request: Request): boolean {
+    const userAgent = request.headers.get('user-agent')?.toLowerCase() || '';
+    
+    // Bloquear user-agents conhecidos de scanners
+    if (this.blockedUserAgents.some(ua => userAgent.includes(ua))) {
+      return true;
+    }
+    
+    // Bloquear requests sem user-agent
+    if (!userAgent) {
+      return true;
+    }
+    
+    return false;
+  },
+  
+  /**
+   * Retorna resposta genérica 404 para esconder existência de rotas
+   */
+  return404(): Response {
+    return new Response('Not Found', {
+      status: 404,
+      headers: {
+        'Content-Type': 'text/plain',
+        'X-Robots-Tag': 'noindex, nofollow',
+      },
+    });
+  },
+};
+
+// ============================================================================
+// 5. IMPLEMENTAÇÃO NO MIDDLEWARE (Next.js)
+// ============================================================================
+
+/**
+ * apps/web/app/middleware.ts
+ * 
+ * Middleware Edge que executa ANTES de qualquer página ser renderizada
+ */
+export const MiddlewareImplementation = `
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { getToken } from 'next-auth/jwt';
+import { IP_WHITELIST, ANTI_MAPPING, TEMP_TOKEN_CONFIG } from '@/lib/security';
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  
+  // 1. Anti-Mapping: Bloquear scanners
+  if (ANTI_MAPPING.isSuspicious(req)) {
+    return ANTI_MAPPING.return404();
+  }
+  
+  // 2. Anti-Mapping: Esconder rotas comuns de admin
+  if (ANTI_MAPPING.hiddenRoutes.some(route => pathname.startsWith(route))) {
+    return ANTI_MAPPING.return404();
+  }
+  
+  // 3. Proteger CRM (Rota Ofuscada)
+  if (pathname.startsWith('/sys_8x9_core')) {
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    
+    // Verificar autenticação
+    if (!token || token.role !== 'master_admin') {
+      return NextResponse.redirect(new URL('/login?error=unauthorized', req.url));
+    }
+    
+    // Verificar IP Whitelist (se habilitado)
+    if (IP_WHITELIST.enabled) {
+      const clientIp = IP_WHITELIST.getRealIp(req);
+      if (!IP_WHITELIST.isAllowed(clientIp)) {
+        console.warn(\`Blocked CRM access from IP: \${clientIp}\`);
+        return ANTI_MAPPING.return404(); // Esconder existência
+      }
+    }
+  }
+  
+  // 4. Proteger Portal do Cliente
+  if (pathname.startsWith('/portal')) {
+    // Verificar token de sessão normal
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    
+    if (token) {
+      // Usuário autenticado normalmente
+      return NextResponse.next();
+    }
+    
+    // Verificar token temporário (para leads)
+    const tempToken = req.nextUrl.searchParams.get('token');
+    if (tempToken) {
+      const decoded = TEMP_TOKEN_CONFIG.verify(tempToken);
+      
+      if (decoded && decoded.allowedRoutes.includes(pathname)) {
+        // Permitir acesso temporário
+        const response = NextResponse.next();
+        response.cookies.set('temp_access', tempToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: 7 * 24 * 60 * 60, // 7 dias
+        });
+        return response;
+      }
+    }
+    
+    // Verificar cookie de acesso temporário
+    const tempCookie = req.cookies.get('temp_access')?.value;
+    if (tempCookie) {
+      const decoded = TEMP_TOKEN_CONFIG.verify(tempCookie);
+      if (decoded && decoded.allowedRoutes.includes(pathname)) {
+        return NextResponse.next();
+      }
+    }
+    
+    // Sem autenticação válida
+    return NextResponse.redirect(new URL('/login', req.url));
+  }
+  
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    '/sys_8x9_core/:path*',
+    '/portal/:path*',
+    '/admin/:path*',
+    '/api/admin/:path*',
+  ],
+};
+`;
+
+// ============================================================================
+// 6. ENDPOINT DE GERAÇÃO DE TOKEN (svc-auth)
+// ============================================================================
+
+/**
+ * POST /auth/generate-temp-link
+ * 
+ * Body: { leadId: string }
+ * Headers: Authorization: Bearer <master_admin_token>
+ * 
+ * Response: { link: string, expiresAt: string }
+ */
+export const GenerateTempLinkEndpoint = `
+@Post('generate-temp-link')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('master_admin')
+async generateTempLink(
+  @Body() dto: GenerateTempLinkDto,
+  @CurrentUser() user: User,
+): Promise<{ link: string; expiresAt: string }> {
+  const token = TEMP_TOKEN_CONFIG.generate(dto.leadId, user.id);
+  
+  const link = \`\${process.env.NEXT_PUBLIC_URL}/portal/dashboard?token=\${token}\`;
+  const expiresAt = new Date(
+    Date.now() + TEMP_TOKEN_CONFIG.expirationDays * 24 * 60 * 60 * 1000
+  ).toISOString();
+  
+  // Salvar no banco para auditoria
+  await this.prisma.tempAccessLog.create({
+    data: {
+      leadId: dto.leadId,
+      token,
+      createdBy: user.id,
+      expiresAt,
+    },
+  });
+  
+  return { link, expiresAt };
+}
+`;
+```

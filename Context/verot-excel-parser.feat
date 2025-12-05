@@ -1,0 +1,565 @@
+/**
+ * VEROT EXCEL PARSER - Especificação Técnica Completa
+ * 
+ * Objetivo: Parser para importar dados Excel exportados do sistema Verot (SpedAdvisor)
+ * e gerar a "Primeira Análise" conforme modelo visual do PDF.
+ * 
+ * Referências:
+ * - Context/Apresentação_Primeira_Análise ultra.pdf (modelo visual)
+ * - UltraTax.rag/SpedAdvisor LayOuts *.xlsx (estrutura dos dados)
+ */
+
+// ============================================================================
+// 1. TIPOS DE ANÁLISES VEROT SUPORTADAS
+// ============================================================================
+
+/**
+ * O sistema Verot gera diversos tipos de análises fiscais.
+ * Cada tipo tem um layout Excel específico.
+ */
+export enum VerotAnalysisType {
+  ICMS_BASE_PIS_COFINS = 'icms_base_pis_cofins',           // Mais comum
+  RESSARCIMENTO_ICMS_ST = 'ressarcimento_icms_st',
+  CREDITO_PIS_COFINS = 'credito_pis_cofins',
+  PREVIDENCIARIO = 'previdenciario',
+  ECREDAC = 'ecredac',
+  CONTROLE_COMPENSACAO = 'controle_compensacao',
+  DARF = 'darf',
+}
+
+/**
+ * Layouts Excel disponíveis (baseado em UltraTax.rag):
+ * 
+ * 1. SpedAdvisor LayOuts ICMS na base PIS_COFINS - versão 6.xlsx
+ *    - Análise de exclusão do ICMS da base de cálculo de PIS/COFINS
+ *    - Colunas: CNPJ, Período, Valor ICMS, Valor PIS, Valor COFINS, Crédito Estimado
+ * 
+ * 2. SpedAdvisor LayOuts Ressarcimento ICMS-ST - v4.xlsx
+ *    - Análise de ressarcimento de ICMS-ST
+ *    - Colunas: CNPJ, Período, Base ICMS-ST, Valor Ressarcível
+ * 
+ * 3. SpedAdvisor LayOuts Controle Compensação v5.xlsx
+ *    - Controle de compensações tributárias
+ * 
+ * 4. SpedAdvisor LayOuts Previdenciario v4.xlsx
+ *    - Análise previdenciária (INSS)
+ * 
+ * 5. SpedAdvisor LayOuts ECREDAC v2.xlsx
+ *    - Crédito acumulado de ICMS
+ */
+
+// ============================================================================
+// 2. ESTRUTURA PADRÃO DOS ARQUIVOS EXCEL VEROT
+// ============================================================================
+
+/**
+ * Estrutura comum dos arquivos Excel exportados do Verot
+ */
+export interface VerotExcelStructure {
+  // Metadados (geralmente nas primeiras linhas)
+  metadata: {
+    empresaNome: string;          // Linha 1 ou 2
+    empresaCNPJ: string;           // Linha 2 ou 3
+    periodoInicio: string;         // Formato: DD/MM/YYYY
+    periodoFim: string;
+    tipoAnalise: VerotAnalysisType;
+    dataGeracao: string;
+    auditorResponsavel?: string;
+  };
+
+  // Dados tabulares (a partir da linha ~5-10)
+  data: {
+    headers: string[];             // Cabeçalhos das colunas
+    rows: any[][];                 // Linhas de dados
+  };
+
+  // Resumo/Totalizadores (geralmente nas últimas linhas)
+  summary: {
+    totalRecuperavel: number;
+    totalTributosPagos: number;
+    percentualEconomia: number;
+    quantidadeOportunidades: number;
+  };
+}
+
+// ============================================================================
+// 3. PARSER PRINCIPAL
+// ============================================================================
+
+/**
+ * Parser genérico para arquivos Excel do Verot
+ */
+export class VerotExcelParser {
+  /**
+   * Detecta automaticamente o tipo de análise baseado no conteúdo do Excel
+   */
+  static detectAnalysisType(workbook: any): VerotAnalysisType {
+    // Verificar nome da planilha ou cabeçalhos
+    const sheetName = workbook.SheetNames[0].toLowerCase();
+    
+    if (sheetName.includes('icms') && sheetName.includes('pis')) {
+      return VerotAnalysisType.ICMS_BASE_PIS_COFINS;
+    }
+    
+    if (sheetName.includes('ressarcimento') || sheetName.includes('icms-st')) {
+      return VerotAnalysisType.RESSARCIMENTO_ICMS_ST;
+    }
+    
+    if (sheetName.includes('previdenciario') || sheetName.includes('inss')) {
+      return VerotAnalysisType.PREVIDENCIARIO;
+    }
+    
+    // Fallback: analisar cabeçalhos
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const headers = this.extractHeaders(sheet);
+    
+    if (headers.some(h => h.includes('ICMS') && h.includes('PIS'))) {
+      return VerotAnalysisType.ICMS_BASE_PIS_COFINS;
+    }
+    
+    return VerotAnalysisType.ICMS_BASE_PIS_COFINS; // Default
+  }
+
+  /**
+   * Extrai metadados do cabeçalho do Excel
+   */
+  static extractMetadata(sheet: any): VerotExcelStructure['metadata'] {
+    // Verot geralmente coloca metadados nas primeiras 5-10 linhas
+    const metadata: any = {};
+
+    // Procurar por padrões comuns
+    for (let row = 1; row <= 10; row++) {
+      const cellA = sheet[`A${row}`]?.v || '';
+      const cellB = sheet[`B${row}`]?.v || '';
+      
+      // CNPJ
+      if (cellA.toLowerCase().includes('cnpj')) {
+        metadata.empresaCNPJ = this.extractCNPJ(cellB);
+      }
+      
+      // Razão Social
+      if (cellA.toLowerCase().includes('razão') || cellA.toLowerCase().includes('empresa')) {
+        metadata.empresaNome = cellB;
+      }
+      
+      // Período
+      if (cellA.toLowerCase().includes('período')) {
+        const periodo = this.extractPeriodo(cellB);
+        metadata.periodoInicio = periodo.inicio;
+        metadata.periodoFim = periodo.fim;
+      }
+    }
+
+    return metadata;
+  }
+
+  /**
+   * Extrai cabeçalhos das colunas
+   */
+  static extractHeaders(sheet: any): string[] {
+    // Procurar linha de cabeçalhos (geralmente entre linha 5-15)
+    for (let row = 5; row <= 15; row++) {
+      const headers: string[] = [];
+      let col = 0;
+      
+      while (true) {
+        const cellRef = this.columnToLetter(col) + row;
+        const cell = sheet[cellRef];
+        
+        if (!cell || !cell.v) break;
+        
+        headers.push(String(cell.v).trim());
+        col++;
+      }
+      
+      // Se encontrou pelo menos 3 colunas, provavelmente é o cabeçalho
+      if (headers.length >= 3) {
+        return headers;
+      }
+    }
+    
+    return [];
+  }
+
+  /**
+   * Extrai linhas de dados
+   */
+  static extractDataRows(sheet: any, headerRow: number): any[][] {
+    const rows: any[][] = [];
+    let currentRow = headerRow + 1;
+    
+    while (true) {
+      const row: any[] = [];
+      let col = 0;
+      let hasData = false;
+      
+      while (col < 20) { // Máximo 20 colunas
+        const cellRef = this.columnToLetter(col) + currentRow;
+        const cell = sheet[cellRef];
+        
+        if (cell && cell.v !== undefined) {
+          row.push(cell.v);
+          hasData = true;
+        } else {
+          row.push(null);
+        }
+        
+        col++;
+      }
+      
+      if (!hasData) break; // Fim dos dados
+      
+      rows.push(row);
+      currentRow++;
+    }
+    
+    return rows;
+  }
+
+  /**
+   * Calcula totalizadores
+   */
+  static calculateSummary(
+    data: any[][],
+    headers: string[],
+    analysisType: VerotAnalysisType
+  ): VerotExcelStructure['summary'] {
+    const summary: any = {
+      totalRecuperavel: 0,
+      totalTributosPagos: 0,
+      percentualEconomia: 0,
+      quantidadeOportunidades: 0,
+    };
+
+    // Encontrar colunas relevantes
+    const valorRecuperavelIdx = headers.findIndex(h => 
+      h.toLowerCase().includes('recuperável') || 
+      h.toLowerCase().includes('crédito')
+    );
+
+    const valorPagoIdx = headers.findIndex(h => 
+      h.toLowerCase().includes('pago') || 
+      h.toLowerCase().includes('devido')
+    );
+
+    // Somar valores
+    data.forEach(row => {
+      if (valorRecuperavelIdx >= 0 && row[valorRecuperavelIdx]) {
+        summary.totalRecuperavel += Number(row[valorRecuperavelIdx]) || 0;
+      }
+      
+      if (valorPagoIdx >= 0 && row[valorPagoIdx]) {
+        summary.totalTributosPagos += Number(row[valorPagoIdx]) || 0;
+      }
+    });
+
+    summary.quantidadeOportunidades = data.length;
+    
+    if (summary.totalTributosPagos > 0) {
+      summary.percentualEconomia = 
+        (summary.totalRecuperavel / summary.totalTributosPagos) * 100;
+    }
+
+    return summary;
+  }
+
+  // Helpers
+  static columnToLetter(col: number): string {
+    let letter = '';
+    while (col >= 0) {
+      letter = String.fromCharCode((col % 26) + 65) + letter;
+      col = Math.floor(col / 26) - 1;
+    }
+    return letter;
+  }
+
+  static extractCNPJ(text: string): string {
+    const match = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
+    return match ? match[0] : text;
+  }
+
+  static extractPeriodo(text: string): { inicio: string; fim: string } {
+    // Formato comum: "01/01/2023 a 31/12/2023"
+    const match = text.match(/(\d{2}\/\d{2}\/\d{4})\s*a\s*(\d{2}\/\d{2}\/\d{4})/);
+    
+    if (match) {
+      return { inicio: match[1], fim: match[2] };
+    }
+    
+    return { inicio: '', fim: '' };
+  }
+}
+
+// ============================================================================
+// 4. TRANSFORMAÇÃO PARA FORMATO DA PRIMEIRA ANÁLISE
+// ============================================================================
+
+/**
+ * Transforma dados parseados do Excel em formato para o Dashboard
+ */
+export class FirstAnalysisTransformer {
+  static transform(verotData: VerotExcelStructure): FirstAnalysisReport {
+    return {
+      metadata: {
+        cnpj: verotData.metadata.empresaCNPJ,
+        razaoSocial: verotData.metadata.empresaNome,
+        periodoAnalise: `${verotData.metadata.periodoInicio} a ${verotData.metadata.periodoFim}`,
+        dataGeracao: new Date().toISOString(),
+        tipoAnalise: verotData.metadata.tipoAnalise,
+      },
+
+      kpis: {
+        valorRecuperavel: verotData.summary.totalRecuperavel,
+        percentualEconomia: verotData.summary.percentualEconomia,
+        totalTributosPagos: verotData.summary.totalTributosPagos,
+        quantidadeCreditosIdentificados: verotData.summary.quantidadeOportunidades,
+      },
+
+      charts: {
+        distribuicaoTributaria: this.generateDistribuicaoChart(verotData),
+        economiaEstimada: this.generateEconomiaChart(verotData),
+        timelineRecuperacao: this.generateTimelineChart(verotData),
+      },
+
+      creditos: {
+        identificados: this.extractCreditos(verotData),
+        potenciais: [],
+      },
+
+      recomendacoes: this.generateRecomendacoes(verotData),
+    };
+  }
+
+  static generateDistribuicaoChart(data: VerotExcelStructure): ChartData[] {
+    // Gráfico de Pizza: Distribuição por tipo de tributo
+    const distribuicao: Map<string, number> = new Map();
+
+    // Agrupar por tipo de tributo (baseado no tipo de análise)
+    switch (data.metadata.tipoAnalise) {
+      case VerotAnalysisType.ICMS_BASE_PIS_COFINS:
+        distribuicao.set('PIS', data.summary.totalRecuperavel * 0.1365);
+        distribuicao.set('COFINS', data.summary.totalRecuperavel * 0.8635);
+        break;
+      
+      case VerotAnalysisType.RESSARCIMENTO_ICMS_ST:
+        distribuicao.set('ICMS-ST', data.summary.totalRecuperavel);
+        break;
+      
+      default:
+        distribuicao.set('Créditos Diversos', data.summary.totalRecuperavel);
+    }
+
+    return Array.from(distribuicao.entries()).map(([name, value]) => ({
+      name,
+      value,
+      color: this.getTributoColor(name),
+    }));
+  }
+
+  static generateEconomiaChart(data: VerotExcelStructure): BarChartData[] {
+    // Gráfico de Barras: Comparação Pago vs Recuperável
+    return [
+      {
+        categoria: 'Total Pago',
+        valorPago: data.summary.totalTributosPagos,
+        valorRecuperavel: 0,
+      },
+      {
+        categoria: 'Recuperável',
+        valorPago: 0,
+        valorRecuperavel: data.summary.totalRecuperavel,
+      },
+    ];
+  }
+
+  static generateTimelineChart(data: VerotExcelStructure): TimelineData[] {
+    // Timeline de recuperação (estimativa mensal)
+    const meses = 12;
+    const valorMensal = data.summary.totalRecuperavel / meses;
+    const timeline: TimelineData[] = [];
+
+    for (let i = 0; i < meses; i++) {
+      timeline.push({
+        mes: `Mês ${i + 1}`,
+        acumulado: valorMensal * (i + 1),
+      });
+    }
+
+    return timeline;
+  }
+
+  static extractCreditos(data: VerotExcelStructure): CreditoItem[] {
+    // Extrair oportunidades identificadas
+    const creditos: CreditoItem[] = [];
+
+    // Baseado no tipo de análise, criar descrições
+    switch (data.metadata.tipoAnalise) {
+      case VerotAnalysisType.ICMS_BASE_PIS_COFINS:
+        creditos.push({
+          tipo: 'ICMS_BASE_PIS_COFINS',
+          descricao: 'Exclusão do ICMS da base de cálculo de PIS/COFINS',
+          valorEstimado: data.summary.totalRecuperavel,
+          fundamentacaoLegal: 'RE 574.706 (Tema 69 STF)',
+          complexidade: 'media',
+        });
+        break;
+      
+      case VerotAnalysisType.RESSARCIMENTO_ICMS_ST:
+        creditos.push({
+          tipo: 'RESSARCIMENTO_ICMS_ST',
+          descricao: 'Ressarcimento de ICMS-ST pago a maior',
+          valorEstimado: data.summary.totalRecuperavel,
+          fundamentacaoLegal: 'LC 87/1996, Art. 10',
+          complexidade: 'alta',
+        });
+        break;
+    }
+
+    return creditos;
+  }
+
+  static generateRecomendacoes(data: VerotExcelStructure): string[] {
+    const recomendacoes: string[] = [];
+
+    if (data.summary.percentualEconomia > 5) {
+      recomendacoes.push('Alto potencial de recuperação identificado. Recomendamos iniciar processo imediatamente.');
+    }
+
+    if (data.summary.quantidadeOportunidades > 10) {
+      recomendacoes.push('Múltiplas oportunidades identificadas. Sugerimos priorizar por valor.');
+    }
+
+    recomendacoes.push('Documentação fiscal deve ser organizada para protocolo junto à Receita.');
+    
+    return recomendacoes;
+  }
+
+  static getTributoColor(tributo: string): string {
+    const colors: Record<string, string> = {
+      'PIS': '#00f2ff',
+      'COFINS': '#7c3aed',
+      'ICMS': '#f59e0b',
+      'ICMS-ST': '#10b981',
+      'IRPJ': '#ef4444',
+      'CSLL': '#ec4899',
+    };
+    return colors[tributo] || '#6b7280';
+  }
+}
+
+// ============================================================================
+// 5. ENDPOINT DE UPLOAD (Backend NestJS)
+// ============================================================================
+
+/**
+ * POST /tax/upload-verot-excel
+ * 
+ * Recebe arquivo Excel do Verot, faz parsing e retorna dados para o Dashboard
+ */
+export const UploadVerotExcelEndpoint = `
+import { Controller, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import * as XLSX from 'xlsx';
+
+@Controller('tax')
+export class TaxController {
+  @Post('upload-verot-excel')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadVerotExcel(@UploadedFile() file: Express.Multer.File) {
+    // 1. Ler arquivo Excel
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+    
+    // 2. Detectar tipo de análise
+    const analysisType = VerotExcelParser.detectAnalysisType(workbook);
+    
+    // 3. Parsear dados
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const metadata = VerotExcelParser.extractMetadata(sheet);
+    const headers = VerotExcelParser.extractHeaders(sheet);
+    const dataRows = VerotExcelParser.extractDataRows(sheet, 10); // Assumindo header na linha 10
+    const summary = VerotExcelParser.calculateSummary(dataRows, headers, analysisType);
+    
+    const verotData: VerotExcelStructure = {
+      metadata: { ...metadata, tipoAnalise: analysisType },
+      data: { headers, rows: dataRows },
+      summary,
+    };
+    
+    // 4. Transformar para formato da Primeira Análise
+    const firstAnalysis = FirstAnalysisTransformer.transform(verotData);
+    
+    // 5. Salvar no banco de dados
+    await this.prisma.taxReport.create({
+      data: {
+        cnpj: firstAnalysis.metadata.cnpj,
+        razaoSocial: firstAnalysis.metadata.razaoSocial,
+        periodoAnalise: firstAnalysis.metadata.periodoAnalise,
+        valorRecuperavel: firstAnalysis.kpis.valorRecuperavel,
+        percentualEconomia: firstAnalysis.kpis.percentualEconomia,
+        dados: firstAnalysis, // JSON completo
+      },
+    });
+    
+    // 6. Retornar para frontend
+    return {
+      success: true,
+      data: firstAnalysis,
+    };
+  }
+}
+`;
+
+// ============================================================================
+// 6. TIPOS COMPARTILHADOS
+// ============================================================================
+
+export interface FirstAnalysisReport {
+  metadata: {
+    cnpj: string;
+    razaoSocial: string;
+    periodoAnalise: string;
+    dataGeracao: string;
+    tipoAnalise: VerotAnalysisType;
+  };
+  kpis: {
+    valorRecuperavel: number;
+    percentualEconomia: number;
+    totalTributosPagos: number;
+    quantidadeCreditosIdentificados: number;
+  };
+  charts: {
+    distribuicaoTributaria: ChartData[];
+    economiaEstimada: BarChartData[];
+    timelineRecuperacao: TimelineData[];
+  };
+  creditos: {
+    identificados: CreditoItem[];
+    potenciais: CreditoItem[];
+  };
+  recomendacoes: string[];
+}
+
+interface ChartData {
+  name: string;
+  value: number;
+  color: string;
+}
+
+interface BarChartData {
+  categoria: string;
+  valorPago: number;
+  valorRecuperavel: number;
+}
+
+interface TimelineData {
+  mes: string;
+  acumulado: number;
+}
+
+interface CreditoItem {
+  tipo: string;
+  descricao: string;
+  valorEstimado: number;
+  fundamentacaoLegal: string;
+  complexidade: 'baixa' | 'media' | 'alta';
+}

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/icons/icon-96x96.png" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+
+    <title>Ultra Systems | Inteligência Tributária e Red Team</title>
+    <meta
+      name="description"
+      content="Ultra Systems: Recuperação Tributária (Ultra Tax) e Cibersegurança Ofensiva (Ultra Security). Red Team, Pentest, Lucro Real e Compliance Fiscal."
+    />
+    <meta
+      name="keywords"
+      content="recuperação tributária, cibersegurança, pentest, red team, compliance fiscal, lucro real, ultra tax, ultra security"
+    />
+    <meta property="og:title" content="Ultra Systems | Tecnologia e Segurança" />
+    <meta
+      property="og:description"
+      content="Transforme complexidade em resultado. Inteligência Tributária e Segurança Cibernética de nível militar."
+    />
+    <meta property="og:type" content="website" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1E40AF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ultra Systems" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+      gtag('config', 'G-XXXXXXXXXX');
+    </script>
+
+    <!-- Meta Pixel -->
+    <script>
+      !(function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = '2.0';
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', 'YOUR_PIXEL_ID');
+      fbq('track', 'PageView');
+    </script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Space Grotesk', 'sans-serif'],
+            },
+            colors: {
+              ultra: {
+                dark: '#050A14', // Dark Navy Background
+                card: '#0F172A', // Card Background
+                primary: '#1E40AF', // Corporate Blue
+                accent: '#38BDF8', // Bright Cyan (Tax/Tech)
+                security: '#EF4444', // Red/Orange for Security (Red Team)
+                text: '#E2E8F0', // Light Grey Text
+                muted: '#94A3B8', // Muted Text
+              },
+            },
+            animation: {
+              blob: 'blob 7s infinite',
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            backgroundImage: {
+              'grid-pattern':
+                'linear-gradient(to right, #1e293b 1px, transparent 1px), linear-gradient(to bottom, #1e293b 1px, transparent 1px)',
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #050a14;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #1e40af;
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #38bdf8;
+      }
+
+      .perspective-1000 {
+        perspective: 1000px;
+      }
+
+      .preserve-3d {
+        transform-style: preserve-3d;
+      }
+
+      /* Utilities */
+      .text-gradient-tax {
+        background: linear-gradient(to right, #38bdf8, #1e40af);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .text-gradient-security {
+        background: linear-gradient(to right, #ef4444, #f97316);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+    </style>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Ultra Systems",
+        "url": "https://ultrasystems.com.br",
+        "logo": "https://ultrasystems.com.br/logo.png",
+        "description": "Inteligência Tributária e Cibersegurança Ofensiva. Recuperação de créditos e Red Team.",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+55-41-99288-1153",
+          "contactType": "sales",
+          "areaServed": "BR",
+          "availableLanguage": "Portuguese"
+        },
+        "sameAs": ["https://www.linkedin.com/company/ultra-systems", "https://www.instagram.com/ultrasystems"]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Service",
+        "serviceType": "Recuperação Tributária",
+        "provider": {
+          "@type": "Organization",
+          "name": "Ultra Systems"
+        },
+        "areaServed": {
+          "@type": "Country",
+          "name": "Brazil"
+        },
+        "hasOfferCatalog": {
+          "@type": "OfferCatalog",
+          "name": "Serviços Tributários",
+          "itemListElement": [
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Service",
+                "name": "Recuperação de Créditos Tributários"
+              }
+            },
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Service",
+                "name": "Retificação eSocial"
+              }
+            }
+          ]
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Service",
+        "serviceType": "Cibersegurança Ofensiva",
+        "provider": {
+          "@type": "Organization",
+          "name": "Ultra Systems"
+        },
+        "areaServed": {
+          "@type": "Country",
+          "name": "Brazil"
+        },
+        "hasOfferCatalog": {
+          "@type": "OfferCatalog",
+          "name": "Serviços de Segurança",
+          "itemListElement": [
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Service",
+                "name": "Red Team as a Service"
+              }
+            },
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Service",
+                "name": "Pentest"
+              }
+            },
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Service",
+                "name": "Monitoramento SOC"
+              }
+            }
+          ]
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+
+  <body
+    class="bg-ultra-dark text-ultra-text selection:bg-ultra-accent overflow-x-hidden antialiased selection:text-white"
+  >
+    <!-- Meta Pixel Noscript -->
+    <noscript
+      ><img
+        height="1"
+        width="1"
+        style="display: none"
+        src="https://www.facebook.com/tr?id=YOUR_PIXEL_ID&ev=PageView&noscript=1"
+    /></noscript>
+
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

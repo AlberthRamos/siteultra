@@ -1,0 +1,92 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ClientSchema = exports.Client = void 0;
+const mongoose_1 = require("@nestjs/mongoose");
+const mongoose_2 = require("mongoose");
+let Client = class Client {
+    name;
+    email;
+    phone;
+    company;
+    cnpj;
+    password;
+    status;
+    assigned_to;
+    lead_id;
+    audit_data_id;
+    notes;
+    is_active;
+};
+exports.Client = Client;
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Client.prototype, "name", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], Client.prototype, "email", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Client.prototype, "phone", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Client.prototype, "company", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Client.prototype, "cnpj", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Client.prototype, "password", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({
+        type: String,
+        enum: ['negotiation', 'audit', 'report_sent', 'contract_signed', 'lost'],
+        default: 'negotiation'
+    }),
+    __metadata("design:type", String)
+], Client.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'AdminUser' }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Client.prototype, "assigned_to", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Lead' }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Client.prototype, "lead_id", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'AuditData' }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Client.prototype, "audit_data_id", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({
+        type: [{
+                date: Date,
+                note: String,
+                created_by: { type: mongoose_2.Types.ObjectId, ref: 'AdminUser' }
+            }]
+    }),
+    __metadata("design:type", Array)
+], Client.prototype, "notes", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: true }),
+    __metadata("design:type", Boolean)
+], Client.prototype, "is_active", void 0);
+exports.Client = Client = __decorate([
+    (0, mongoose_1.Schema)({ timestamps: true })
+], Client);
+exports.ClientSchema = mongoose_1.SchemaFactory.createForClass(Client);
+//# sourceMappingURL=client.schema.js.map

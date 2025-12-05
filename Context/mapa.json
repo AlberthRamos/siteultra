@@ -1,0 +1,61 @@
+{
+    "project_name": "ultra-systems-platform",
+    "version": "2.0.0",
+    "framework": "nextjs-app-router",
+    "theme_strategy": "mui-glassmorphism",
+    "modules": {
+        "public_web": {
+            "pages": [
+                "home",
+                "ultra-tax",
+                "ultra-security",
+                "blog",
+                "contact"
+            ],
+            "features": [
+                "seo-ai-agent",
+                "lead-capture-form"
+            ]
+        },
+        "auth_system": {
+            "provider": "next-auth-v5",
+            "roles": [
+                "public",
+                "lead_viewer",
+                "client",
+                "auditor",
+                "master_admin"
+            ],
+            "strategies": [
+                "jwt",
+                "temporary-link"
+            ]
+        },
+        "client_portal": {
+            "features": [
+                "first-analysis-dashboard",
+                "tax-audit-tracker",
+                "security-dashboard-placeholder"
+            ],
+            "data_source": "verot-integration-api"
+        },
+        "ultra_crm": {
+            "access": "master_admin_only",
+            "features": [
+                "lead-management",
+                "audit-pipeline",
+                "contract-manager",
+                "blog-cms-ai"
+            ]
+        }
+    },
+    "ai_microservice": {
+        "model": "gemini-2.5-flash",
+        "tasks": [
+            "auto-blog-post",
+            "sitemap-optimizer",
+            "trend-analysis"
+        ],
+        "trigger": "cron-job"
+    }
+}

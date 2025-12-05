@@ -1,0 +1,510 @@
+/**
+ * AI & SEO AUTOMATION - Especificação Técnica
+ * Service: svc-ai-agent
+ * Integração: Google Gemini 2.5 Flash API
+ * 
+ * Objetivo: Automatizar criação de conteúdo e otimização SEO
+ */
+
+// ============================================================================
+// 1. INTEGRAÇÃO GEMINI 2.5 FLASH
+// ============================================================================
+
+/**
+ * Configuração do cliente Gemini
+ */
+export const GeminiConfig = {
+  apiKey: process.env.GEMINI_API_KEY,
+  model: 'gemini-2.5-flash',
+  baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+  
+  /**
+   * System prompt customizável pelo Master Admin via CRM
+   */
+  defaultSystemPrompt: `
+Você é um especialista em Recuperação Tributária e Cibersegurança Ofensiva.
+Escreva posts de blog informativos e otimizados para SEO sobre:
+- Recuperação de créditos tributários (PIS, COFINS, ICMS)
+- Auditoria fiscal
+- Pentest e Red Team
+- Vulnerabilidades de segurança
+
+Diretrizes:
+- Tom profissional mas acessível
+- Use dados e exemplos práticos
+- Inclua CTAs para contato
+- Otimize para palavras-chave relevantes
+- Formato: Markdown
+- Tamanho: 800-1200 palavras
+`,
+  
+  /**
+   * Parâmetros de geração
+   */
+  generationConfig: {
+    temperature: 0.7,
+    topK: 40,
+    topP: 0.95,
+    maxOutputTokens: 2048,
+  },
+};
+
+/**
+ * Cliente Gemini (NestJS Service)
+ */
+export const GeminiClientService = `
+import { Injectable } from '@nestjs/common';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+@Injectable()
+export class GeminiClientService {
+  private genAI: GoogleGenerativeAI;
+  private model: any;
+
+  constructor() {
+    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    this.model = this.genAI.getGenerativeModel({ 
+      model: 'gemini-2.5-flash',
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      },
+    });
+  }
+
+  async generateBlogPost(
+    topic: string,
+    keywords: string[],
+    systemPrompt?: string,
+  ): Promise<string> {
+    const prompt = \`
+\${systemPrompt || GeminiConfig.defaultSystemPrompt}
+
+Tópico: \${topic}
+Palavras-chave para incluir: \${keywords.join(', ')}
+
+Escreva um post de blog completo em Markdown.
+    \`;
+
+    const result = await this.model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  }
+
+  async analyzeTrends(): Promise<string[]> {
+    const prompt = \`
+Analise as tendências atuais em:
+1. Recuperação Tributária no Brasil
+2. Cibersegurança Ofensiva
+
+Liste 5 tópicos relevantes para criar posts de blog.
+Retorne apenas a lista, um tópico por linha.
+    \`;
+
+    const result = await this.model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    
+    return text.split('\\n').filter(line => line.trim());
+  }
+}
+`;
+
+// ============================================================================
+// 2. AUTO-BLOGGING (Cron Job)
+// ============================================================================
+
+/**
+ * Cron job que roda diariamente para gerar posts automaticamente
+ */
+export const AutoBlogCron = `
+import { Injectable } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { GeminiClientService } from '../gemini/gemini-client.service';
+import { BlogService } from '../../blog/blog.service';
+
+@Injectable()
+export class AutoBlogCron {
+  constructor(
+    private geminiClient: GeminiClientService,
+    private blogService: BlogService,
+  ) {}
+
+  /**
+   * Executa todos os dias às 9h
+   */
+  @Cron('0 9 * * *')
+  async generateDailyPost() {
+    console.log('[AutoBlog] Iniciando geração de post diário...');
+
+    try {
+      // 1. Analisar trends
+      const trends = await this.geminiClient.analyzeTrends();
+      
+      if (trends.length === 0) {
+        console.log('[AutoBlog] Nenhum trend identificado.');
+        return;
+      }
+
+      // 2. Selecionar tópico aleatório
+      const topic = trends[Math.floor(Math.random() * trends.length)];
+      console.log(\`[AutoBlog] Tópico selecionado: \${topic}\`);
+
+      // 3. Definir keywords baseadas no tópico
+      const keywords = this.extractKeywords(topic);
+
+      // 4. Buscar system prompt customizado (se existir)
+      const systemPrompt = await this.blogService.getSystemPrompt();
+
+      // 5. Gerar conteúdo
+      const content = await this.geminiClient.generateBlogPost(
+        topic,
+        keywords,
+        systemPrompt,
+      );
+
+      // 6. Extrair título (primeira linha do markdown)
+      const title = this.extractTitle(content);
+
+      // 7. Gerar slug
+      const slug = this.generateSlug(title);
+
+      // 8. Gerar excerpt (primeiros 200 caracteres)
+      const excerpt = this.extractExcerpt(content);
+
+      // 9. Categorizar automaticamente
+      const category = this.categorizeContent(content);
+
+      // 10. Salvar como draft
+      await this.blogService.createPost({
+        title,
+        slug,
+        excerpt,
+        content,
+        category,
+        tags: keywords,
+        author: 'IA',
+        status: 'draft', // Master Admin revisa antes de publicar
+      });
+
+      console.log(\`[AutoBlog] Post criado com sucesso: \${title}\`);
+
+      // 11. Notificar Master Admin (opcional)
+      // await this.notificationService.notifyNewDraft(title);
+
+    } catch (error) {
+      console.error('[AutoBlog] Erro ao gerar post:', error);
+    }
+  }
+
+  private extractKeywords(topic: string): string[] {
+    // Lógica simples de extração de keywords
+    const commonWords = ['de', 'da', 'do', 'em', 'para', 'com', 'e', 'o', 'a'];
+    return topic
+      .toLowerCase()
+      .split(' ')
+      .filter(word => word.length > 3 && !commonWords.includes(word))
+      .slice(0, 5);
+  }
+
+  private extractTitle(content: string): string {
+    const lines = content.split('\\n');
+    const titleLine = lines.find(line => line.startsWith('# '));
+    return titleLine ? titleLine.replace('# ', '').trim() : 'Sem Título';
+  }
+
+  private generateSlug(title: string): string {
+    return title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\\u0300-\\u036f]/g, '') // Remove acentos
+      .replace(/[^a-z0-9\\s-]/g, '')
+      .replace(/\\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim();
+  }
+
+  private extractExcerpt(content: string): string {
+    const plainText = content
+      .replace(/^#.*$/gm, '') // Remove headers
+      .replace(/\\*\\*(.+?)\\*\\*/g, '$1') // Remove bold
+      .replace(/\\*(.+?)\\*/g, '$1') // Remove italic
+      .trim();
+    
+    return plainText.substring(0, 200) + '...';
+  }
+
+  private categorizeContent(content: string): string {
+    const lowerContent = content.toLowerCase();
+    
+    if (lowerContent.includes('tributário') || lowerContent.includes('fiscal')) {
+      return 'tributario';
+    }
+    
+    if (lowerContent.includes('pentest') || lowerContent.includes('segurança')) {
+      return 'seguranca';
+    }
+    
+    return 'tecnologia';
+  }
+}
+`;
+
+// ============================================================================
+// 3. SEO AUTOMATION
+// ============================================================================
+
+/**
+ * Geração automática de sitemap.xml
+ */
+export const SitemapGenerator = `
+import { Injectable } from '@nestjs/common';
+import { BlogService } from '../blog/blog.service';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+@Injectable()
+export class SitemapGeneratorService {
+  constructor(private blogService: BlogService) {}
+
+  async generateSitemap(): Promise<string> {
+    const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://ultrasystems.com.br';
+    
+    // Rotas estáticas
+    const staticRoutes = [
+      { loc: '/', priority: '1.0', changefreq: 'daily' },
+      { loc: '/servicos/ultratax', priority: '0.9', changefreq: 'weekly' },
+      { loc: '/servicos/ultrasecurity', priority: '0.9', changefreq: 'weekly' },
+      { loc: '/sobre', priority: '0.8', changefreq: 'monthly' },
+      { loc: '/contato', priority: '0.8', changefreq: 'monthly' },
+      { loc: '/blog', priority: '0.9', changefreq: 'daily' },
+    ];
+
+    // Rotas dinâmicas (posts do blog)
+    const posts = await this.blogService.getPublishedPosts();
+    const postRoutes = posts.map(post => ({
+      loc: \`/blog/\${post.slug}\`,
+      priority: '0.7',
+      changefreq: 'weekly',
+      lastmod: post.updatedAt.toISOString().split('T')[0],
+    }));
+
+    const allRoutes = [...staticRoutes, ...postRoutes];
+
+    // Gerar XML
+    const xml = \`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+\${allRoutes.map(route => \`
+  <url>
+    <loc>\${baseUrl}\${route.loc}</loc>
+    <changefreq>\${route.changefreq}</changefreq>
+    <priority>\${route.priority}</priority>
+    \${route.lastmod ? \`<lastmod>\${route.lastmod}</lastmod>\` : ''}
+  </url>\`).join('')}
+</urlset>\`;
+
+    // Salvar no diretório público do Next.js
+    const sitemapPath = path.join(process.cwd(), '../web/public/sitemap.xml');
+    await fs.writeFile(sitemapPath, xml, 'utf-8');
+
+    console.log('[SEO] Sitemap gerado com sucesso');
+    return xml;
+  }
+
+  /**
+   * Faz ping nos motores de busca para notificar sobre atualização
+   */
+  async pingSearchEngines(): Promise<void> {
+    const sitemapUrl = \`\${process.env.NEXT_PUBLIC_URL}/sitemap.xml\`;
+    
+    const searchEngines = [
+      \`https://www.google.com/ping?sitemap=\${encodeURIComponent(sitemapUrl)}\`,
+      \`https://www.bing.com/ping?sitemap=\${encodeURIComponent(sitemapUrl)}\`,
+    ];
+
+    for (const url of searchEngines) {
+      try {
+        await fetch(url);
+        console.log(\`[SEO] Ping enviado para: \${url}\`);
+      } catch (error) {
+        console.error(\`[SEO] Erro ao fazer ping: \${url}\`, error);
+      }
+    }
+  }
+}
+`;
+
+/**
+ * Schema.org para AEO (Answer Engine Optimization)
+ */
+export const SchemaOrgTemplates = {
+  Organization: {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Ultra Systems',
+    url: 'https://ultrasystems.com.br',
+    logo: 'https://ultrasystems.com.br/logo.png',
+    description: 'Inteligência Tributária e Cibersegurança Ofensiva',
+    contactPoint: {
+      '@type': 'ContactPoint',
+      telephone: '+55-41-99288-1153',
+      contactType: 'customer service',
+      areaServed: 'BR',
+      availableLanguage: 'Portuguese',
+    },
+    sameAs: [
+      'https://linkedin.com/company/ultrasystems',
+      'https://instagram.com/ultrasystems',
+    ],
+  },
+  
+  FinancialService: {
+    '@context': 'https://schema.org',
+    '@type': 'FinancialService',
+    name: 'Ultra Tax - Recuperação Tributária',
+    description: 'Serviço especializado em recuperação de créditos tributários',
+    provider: {
+      '@type': 'Organization',
+      name: 'Ultra Systems',
+    },
+    areaServed: 'BR',
+    serviceType: 'Tax Recovery',
+  },
+  
+  SecurityService: {
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    name: 'Ultra Security - Cibersegurança Ofensiva',
+    description: 'Pentest, Red Team e Vulnerability Assessment',
+    provider: {
+      '@type': 'Organization',
+      name: 'Ultra Systems',
+    },
+    serviceType: 'Cybersecurity',
+  },
+  
+  BlogPosting: (post: any) => ({
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: post.excerpt,
+    image: post.coverImage,
+    datePublished: post.publishedAt,
+    dateModified: post.updatedAt,
+    author: {
+      '@type': post.author === 'IA' ? 'Organization' : 'Person',
+      name: post.author === 'IA' ? 'Ultra Systems AI' : post.author,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Ultra Systems',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://ultrasystems.com.br/logo.png',
+      },
+    },
+  }),
+};
+
+// ============================================================================
+// 4. ENDPOINTS (svc-ai-agent)
+// ============================================================================
+
+/**
+ * POST /ai/generate-post (manual ou cron)
+ * Body: { topic: string, keywords: string[] }
+ * Response: { postId: string, title: string }
+ * 
+ * PUT /ai/system-prompt (apenas master_admin)
+ * Body: { prompt: string }
+ * Response: { success: boolean }
+ * 
+ * POST /ai/update-sitemap
+ * Response: { success: boolean, url: string }
+ * 
+ * POST /ai/ping-search-engines
+ * Response: { success: boolean }
+ */
+
+// ============================================================================
+// 5. CONTROLE VIA CRM
+// ============================================================================
+
+/**
+ * Interface no CRM para Master Admin controlar a IA
+ * apps/web/app/sys_8x9_core/ai-control/page.tsx
+ */
+export const AIControlUI = `
+'use client';
+
+import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Box, TextField, Button, Typography, Switch, FormControlLabel } from '@mui/material';
+
+export default function AIControl() {
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [autoBlogEnabled, setAutoBlogEnabled] = useState(true);
+
+  const { data: currentPrompt } = useQuery({
+    queryKey: ['ai', 'system-prompt'],
+    queryFn: () => fetch('/api/ai/system-prompt').then(r => r.json()),
+  });
+
+  const updatePromptMutation = useMutation({
+    mutationFn: (prompt: string) =>
+      fetch('/api/ai/system-prompt', {
+        method: 'PUT',
+        body: JSON.stringify({ prompt }),
+      }),
+  });
+
+  const generatePostMutation = useMutation({
+    mutationFn: () =>
+      fetch('/api/ai/generate-post', { method: 'POST' }),
+  });
+
+  return (
+    <Box>
+      <Typography variant="h4">Controle da IA</Typography>
+      
+      <FormControlLabel
+        control={
+          <Switch
+            checked={autoBlogEnabled}
+            onChange={(e) => setAutoBlogEnabled(e.target.checked)}
+          />
+        }
+        label="Auto-blogging Diário"
+      />
+      
+      <TextField
+        fullWidth
+        multiline
+        rows={10}
+        label="System Prompt"
+        value={systemPrompt || currentPrompt?.prompt}
+        onChange={(e) => setSystemPrompt(e.target.value)}
+        sx={{ mt: 2 }}
+      />
+      
+      <Button
+        variant="contained"
+        onClick={() => updatePromptMutation.mutate(systemPrompt)}
+        sx={{ mt: 2 }}
+      >
+        Salvar Prompt
+      </Button>
+      
+      <Button
+        variant="outlined"
+        onClick={() => generatePostMutation.mutate()}
+        sx={{ mt: 2, ml: 2 }}
+      >
+        Gerar Post Agora
+      </Button>
+    </Box>
+  );
+}
+`;

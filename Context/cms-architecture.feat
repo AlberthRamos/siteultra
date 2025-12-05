@@ -1,0 +1,322 @@
+/**
+ * CMS ARCHITECTURE - Especificação Técnica
+ * Service: svc-core
+ * Frontend: Next.js (ISR)
+ * Cache: Redis
+ * 
+ * Objetivo: Permitir que o Master Admin atualize banners e conteúdo do site
+ * institucional sem rebuild, usando Incremental Static Regeneration.
+ */
+
+// ============================================================================
+// 1. DATA MODEL (PostgreSQL via Prisma)
+// ============================================================================
+
+/**
+ * Schema Prisma para Banners
+ */
+export const BannerSchema = `
+model Banner {
+  id          String   @id @default(uuid())
+  position    String   // 'hero', 'secondary', 'cta'
+  title       String
+  subtitle    String?
+  ctaText     String?
+  ctaLink     String?
+  imageUrl    String
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String   // User ID (master_admin)
+  
+  @@index([position, isActive, order])
+}
+`;
+
+/**
+ * Schema Prisma para Blog Posts
+ */
+export const BlogPostSchema = `
+model BlogPost {
+  id            String   @id @default(uuid())
+  slug          String   @unique
+  title         String
+  excerpt       String
+  content       String   // Markdown
+  coverImage    String?
+  category      String   // 'tributario', 'seguranca', 'tecnologia'
+  tags          String[] // Array de tags
+  author        String   // 'IA' ou User ID
+  status        String   // 'draft', 'published'
+  publishedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([status, publishedAt])
+  @@index([category])
+}
+`;
+
+// ============================================================================
+// 2. CACHE STRATEGY (Redis)
+// ============================================================================
+
+/**
+ * Cache-on-Request Pattern
+ * 
+ * Fluxo:
+ * 1. Frontend faz request para /api/cms/banners
+ * 2. Next.js verifica cache Redis (TTL: 60s)
+ * 3. Se hit: retorna dados cacheados
+ * 4. Se miss: busca no PostgreSQL, salva no Redis, retorna
+ * 
+ * Invalidação:
+ * - Quando Master Admin atualiza banner via CRM, invalida cache específico
+ * - Revalidação automática via ISR (revalidate: 60)
+ */
+
+export interface CacheConfig {
+  banners: {
+    key: 'cms:banners:all';
+    ttl: 60; // segundos
+  };
+  blogPosts: {
+    key: 'cms:blog:posts:published';
+    ttl: 300; // 5 minutos
+  };
+  singlePost: {
+    keyPattern: 'cms:blog:post:{slug}';
+    ttl: 600; // 10 minutos
+  };
+}
+
+/**
+ * Exemplo de implementação (NestJS)
+ */
+export const CacheService = `
+import { Injectable } from '@nestjs/common';
+import { Redis } from 'ioredis';
+
+@Injectable()
+export class CmsService {
+  constructor(
+    private prisma: PrismaService,
+    private redis: Redis,
+  ) {}
+
+  async getBanners(): Promise<Banner[]> {
+    const cacheKey = 'cms:banners:all';
+    
+    // Tentar cache
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    
+    // Buscar no banco
+    const banners = await this.prisma.banner.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' },
+    });
+    
+    // Salvar no cache
+    await this.redis.setex(cacheKey, 60, JSON.stringify(banners));
+    
+    return banners;
+  }
+
+  async updateBanner(id: string, data: UpdateBannerDto): Promise<Banner> {
+    const banner = await this.prisma.banner.update({
+      where: { id },
+      data,
+    });
+    
+    // Invalidar cache
+    await this.redis.del('cms:banners:all');
+    
+    // Trigger revalidation no Next.js
+    await this.revalidateNextJs('/');
+    
+    return banner;
+  }
+
+  private async revalidateNextJs(path: string): Promise<void> {
+    const revalidateUrl = \`\${process.env.NEXT_PUBLIC_URL}/api/revalidate?secret=\${process.env.REVALIDATE_SECRET}&path=\${path}\`;
+    await fetch(revalidateUrl);
+  }
+}
+`;
+
+// ============================================================================
+// 3. ISR (Incremental Static Regeneration) - Next.js
+// ============================================================================
+
+/**
+ * Página Home com ISR
+ * apps/web/app/(public)/page.tsx
+ */
+export const HomePageISR = `
+import { getBanners } from '@/lib/api-client';
+
+export const revalidate = 60; // Revalidar a cada 60 segundos
+
+export default async function HomePage() {
+  const banners = await getBanners();
+  
+  return (
+    <main>
+      <HeroSection banner={banners.find(b => b.position === 'hero')} />
+      <ServicesSection />
+      <CTASection banner={banners.find(b => b.position === 'cta')} />
+    </main>
+  );
+}
+`;
+
+/**
+ * API Route para Revalidação Manual
+ * apps/web/app/api/revalidate/route.ts
+ */
+export const RevalidateRoute = `
+import { revalidatePath } from 'next/cache';
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function GET(request: NextRequest) {
+  const secret = request.nextUrl.searchParams.get('secret');
+  const path = request.nextUrl.searchParams.get('path');
+  
+  // Validar secret
+  if (secret !== process.env.REVALIDATE_SECRET) {
+    return NextResponse.json({ message: 'Invalid secret' }, { status: 401 });
+  }
+  
+  if (!path) {
+    return NextResponse.json({ message: 'Missing path' }, { status: 400 });
+  }
+  
+  try {
+    revalidatePath(path);
+    return NextResponse.json({ revalidated: true, path });
+  } catch (err) {
+    return NextResponse.json({ message: 'Error revalidating' }, { status: 500 });
+  }
+}
+`;
+
+// ============================================================================
+// 4. CRM INTERFACE (Master Admin)
+// ============================================================================
+
+/**
+ * Página de Gerenciamento de Banners
+ * apps/web/app/sys_8x9_core/cms/banners/page.tsx
+ */
+export const BannerManagementUI = `
+'use client';
+
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DataGrid } from '@mui/x-data-grid';
+import { Button, Dialog, TextField } from '@mui/material';
+
+export default function BannerManagement() {
+  const queryClient = useQueryClient();
+  const [editDialog, setEditDialog] = useState(false);
+  const [selectedBanner, setSelectedBanner] = useState<Banner | null>(null);
+  
+  const { data: banners } = useQuery({
+    queryKey: ['cms', 'banners'],
+    queryFn: () => fetch('/api/cms/banners').then(r => r.json()),
+  });
+  
+  const updateMutation = useMutation({
+    mutationFn: (data: UpdateBannerDto) => 
+      fetch(\`/api/cms/banners/\${selectedBanner.id}\`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cms', 'banners'] });
+      setEditDialog(false);
+    },
+  });
+  
+  return (
+    <Box>
+      <Typography variant="h4">Gerenciar Banners</Typography>
+      
+      <DataGrid
+        rows={banners || []}
+        columns={[
+          { field: 'position', headerName: 'Posição', width: 150 },
+          { field: 'title', headerName: 'Título', width: 300 },
+          { field: 'isActive', headerName: 'Ativo', type: 'boolean' },
+          {
+            field: 'actions',
+            headerName: 'Ações',
+            renderCell: (params) => (
+              <Button onClick={() => {
+                setSelectedBanner(params.row);
+                setEditDialog(true);
+              }}>
+                Editar
+              </Button>
+            ),
+          },
+        ]}
+      />
+      
+      <Dialog open={editDialog} onClose={() => setEditDialog(false)}>
+        {/* Form de edição com upload de imagem */}
+      </Dialog>
+    </Box>
+  );
+}
+`;
+
+// ============================================================================
+// 5. UPLOAD DE IMAGENS
+// ============================================================================
+
+/**
+ * Estratégia de Upload:
+ * 
+ * Opção 1 (Recomendada): Cloudinary ou Uploadcare
+ * - Upload direto do browser para CDN
+ * - Retorna URL pública
+ * - Salva URL no banco
+ * 
+ * Opção 2: Upload para servidor (Next.js API Route)
+ * - Salvar em /public/uploads
+ * - Servir via Next.js static files
+ * - Menos escalável
+ */
+
+export const ImageUploadConfig = {
+  provider: 'cloudinary', // ou 'uploadcare', 'vercel-blob'
+  maxSize: 5 * 1024 * 1024, // 5MB
+  allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+  transformations: {
+    hero: { width: 1920, height: 1080, crop: 'fill' },
+    thumbnail: { width: 400, height: 300, crop: 'fill' },
+  },
+};
+
+// ============================================================================
+// 6. ENDPOINTS (svc-core)
+// ============================================================================
+
+/**
+ * GET /cms/banners (público, com cache)
+ * GET /cms/banners/:id (público)
+ * POST /cms/banners (apenas master_admin)
+ * PUT /cms/banners/:id (apenas master_admin)
+ * DELETE /cms/banners/:id (apenas master_admin)
+ * 
+ * GET /blog/posts (público, filtros: category, tag, limit)
+ * GET /blog/posts/:slug (público)
+ * POST /blog/posts (master_admin ou svc-ai-agent)
+ * PUT /blog/posts/:id (master_admin)
+ * DELETE /blog/posts/:id (master_admin)
+ */

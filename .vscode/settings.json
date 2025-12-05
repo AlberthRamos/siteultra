@@ -1,0 +1,12 @@
+{
+    "terminal.explorerKind": "external",
+    "terminal.integrated.accessibleViewFocusOnCommandExecution": true,
+    "terminal.integrated.accessibleViewPreserveCursorPosition": true,
+    "terminal.integrated.allowMnemonics": true,
+    "terminal.integrated.automationProfile.linux": {},
+    "terminal.integrated.defaultProfile.osx": null,
+    "terminal.integrated.localEchoEnabled": "on",
+    "terminal.sourceControlRepositoriesKind": "external",
+    "workbench.editor.preferHistoryBasedLanguageDetection": true,
+    "editor.stickyScroll.defaultModel": "foldingProviderModel"
+}

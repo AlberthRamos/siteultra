@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: ultra-systems-frontend
+    env: node
+    plan: standard # Necessário para performance
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false # Inserir manualmente no painel
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY # Previne Clickjacking
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
