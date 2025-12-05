@@ -1,215 +1,205 @@
-# Ultra Systems - README
+# 🚀 Ultra Systems - Inteligência Tributária
 
-## 🚀 Projeto Full Stack
+Sistema completo de inteligência tributária desenvolvido com as mais modernas tecnologias web, oferecendo soluções completas para gestão fiscal, auditoria e segurança de dados.
 
-**Ultra Systems** é uma plataforma completa de Inteligência Tributária e Cibersegurança Ofensiva.
+## 📋 Sobre o Projeto
 
-### 🛠️ Stack Tecnológica
+Ultra Systems é uma plataforma integrada que combina:
+- **UltraTax**: Sistema avançado de gestão fiscal e tributária
+- **UltraSecurity**: Solução completa de segurança e proteção de dados
+- **IA Generativa**: Inteligência artificial para análise e geração de conteúdo
 
-- **Frontend**: React + TypeScript + Vite + TailwindCSS
-- **Backend**: Node.js + Express + MongoDB
-- **Infraestrutura**: Docker + Docker Compose
-- **PWA**: Service Worker + Manifest
-- **Analytics**: Google Analytics 4 + Meta Pixel
+## 🏗️ Arquitetura
 
----
-
-## 📦 Instalação Rápida
-
-### **Opção 1: Docker (Recomendado)**
-
-```bash
-# Windows
-setup-docker.bat
-
-# Linux/Mac
-chmod +x setup-docker.sh
-./setup-docker.sh
-```
-
-### **Opção 2: Desenvolvimento Local**
-
-```bash
-# 1. Instalar dependências do frontend
-npm install
-
-# 2. Instalar dependências da API
-cd api
-npm install
-cd ..
-
-# 3. Iniciar MongoDB (Docker)
-docker run -d -p 27017:27017 --name ultra-mongo mongo:7.0
-
-# 4. Iniciar API (Terminal 1)
-cd api
-npm run dev
-
-# 5. Iniciar Frontend (Terminal 2)
-npm run dev
-```
-
----
-
-## 🌐 Acessos
-
-| Serviço | URL | Credenciais |
-|---------|-----|-------------|
-| **Frontend** | <http://localhost:3000> | - |
-| **API** | <http://localhost:3001> | - |
-| **Mongo Express** | <http://localhost:8081> | admin / ultra2024 |
-| **Dashboard Leads** | <http://localhost:3000/#/admin/leads> | - |
-
----
-
-## 📁 Estrutura do Projeto
-
+### Monorepo Structure
 ```
 ultra-systems/
-├── api/                    # Backend Node.js
-│   ├── server.js          # Express API
-│   ├── package.json       # Dependencies
-│   └── Dockerfile         # API container
-├── components/            # React components
-├── pages/                 # React pages
-├── services/              # API services
-├── public/                # Static files
-├── docker-compose.yml     # Docker orchestration
-├── Dockerfile            # Frontend container
-└── README.md             # This file
+├── apps/
+│   └── web/                    # Next.js 14 application
+├── api/                        # NestJS backend API
+├── Context/                    # Context documentation and configs
+├── UltraTax.rag/              # RAG system for tax intelligence
+├── infra/                      # Infrastructure configurations
+└── shared/                     # Shared utilities and types
 ```
 
----
+### Tech Stack
 
-## 🔧 Configuração
+**Frontend:**
+- ⚡ Next.js 14 (App Router)
+- 🎨 Material-UI v5
+- ✨ Framer Motion (animations)
+- 🔄 TanStack Query (data fetching)
+- 🗂️ Zustand (state management)
+- 🔐 NextAuth.js (authentication)
 
-### **Variáveis de Ambiente**
+**Backend:**
+- 🚀 NestJS
+- 🐘 PostgreSQL (Prisma ORM)
+- 🔴 Redis (caching)
+- 🔐 JWT Authentication
+- 📁 Multer (file uploads)
 
-#### Frontend (`.env`)
+**DevOps:**
+- 🐳 Docker & Docker Compose
+- 🔄 GitHub Actions (CI/CD)
+- 🌐 Render.com (deployment)
 
-```env
-VITE_API_URL=http://localhost:3001
-```
+## 🚀 Começando
 
-#### Backend (`api/.env`)
+### Pré-requisitos
+- Node.js 18+ 
+- Docker e Docker Compose
+- PostgreSQL 14+
+- Redis 6+
 
-```env
-PORT=3001
-MONGODB_URI=mongodb://mongodb:27017/ultra_systems
-FRONTEND_URL=http://localhost:3000
-```
+### Instalação
 
----
-
-## 📊 Features Implementadas
-
-### ✅ **Frontend**
-
-- [x] PWA (Progressive Web App)
-- [x] Service Worker (offline support)
-- [x] Lazy loading de imagens
-- [x] FAQ interativo
-- [x] Calculadora de economia tributária
-- [x] Trust badges e social proof
-- [x] Chat widget (Tawk.to)
-- [x] Scroll to top button
-- [x] Loading screen
-- [x] Accessibility (WCAG 2.1)
-
-### ✅ **Backend**
-
-- [x] API RESTful
-- [x] MongoDB integration
-- [x] CORS configurado
-- [x] Rate limiting
-- [x] Helmet security
-- [x] Analytics endpoint
-
-### ✅ **DevOps**
-
-- [x] Docker Compose
-- [x] Multi-container setup
-- [x] Volume persistence
-- [x] Network isolation
-- [x] Health checks
-
----
-
-## 📝 Scripts Disponíveis
-
+1. Clone o repositório:
 ```bash
-# Frontend
-npm run dev          # Desenvolvimento
-npm run build        # Build produção
-npm run preview      # Preview build
-
-# API
-cd api
-npm start           # Produção
-npm run dev         # Desenvolvimento (nodemon)
-
-# Docker
-docker-compose up -d              # Iniciar tudo
-docker-compose down               # Parar tudo
-docker-compose logs -f            # Ver logs
-docker-compose restart api        # Reiniciar API
-docker-compose down -v            # Parar e limpar volumes
+git clone https://github.com/SEU_USUARIO/ultra-systems-inteligencia-tributaria.git
+cd ultra-systems-inteligencia-tributaria
 ```
 
----
-
-## 🚀 Deploy
-
-### **Frontend** (Vercel/Netlify)
-
+2. Instale as dependências:
 ```bash
-npm run build
-# Deploy pasta 'dist'
+npm install
 ```
 
-### **Backend** (Railway/Render)
-
+3. Configure as variáveis de ambiente:
 ```bash
-# Push para Git
-# Configurar variáveis de ambiente
-# Deploy automático
+cp .env.example .env
+# Edite .env com suas configurações
 ```
 
-### **MongoDB** (MongoDB Atlas)
-
+4. Execute o banco de dados:
 ```bash
-# Criar cluster gratuito
-# Copiar connection string
-# Atualizar MONGODB_URI
+docker-compose up -d postgres redis
 ```
 
----
+5. Execute as migrações:
+```bash
+npm run db:migrate
+```
 
-## 📈 Roadmap
+6. Inicie o servidor de desenvolvimento:
+```bash
+npm run dev
+```
 
-- [ ] Autenticação JWT
-- [ ] Dashboard analytics avançado
-- [ ] Email notifications (Nodemailer)
-- [ ] CRM integration (HubSpot)
-- [ ] Webhooks
-- [ ] Testes E2E (Playwright)
-- [ ] CI/CD (GitHub Actions)
-- [ ] Monitoring (Sentry)
+## 📁 Estrutura de Contexto
 
----
+### ServiceUltraTax
+Diretório contendo todos os produtos e serviços relacionados à gestão fiscal:
+- Planilhas de cálculo tributário
+- Templates de relatórios fiscais
+- Documentações técnicas
+- Guias de implementação
+
+### ServiceUltraSecurity
+Diretório com soluções de segurança:
+- Protocolos de segurança
+- Ferramentas de auditoria
+- Certificações e conformidades
+- Templates de segurança
+
+## 🎨 Design System
+
+O projeto utiliza um design system baseado em **Glassmorphism** com:
+- Cores principais: Azul neon (#00f2ff) e Roxo (#7c3aed)
+- Fundos escuros com efeitos de blur
+- Animações suaves com Framer Motion
+- Layout responsivo para todos os dispositivos
+
+## 🔄 Desenvolvimento
+
+### Workflow
+O projeto segue um workflow detalhado documentado em `Context/development-workflow.feat` com:
+- 8 fases de desenvolvimento
+- Arquivos `.feat` para cada funcionalidade
+- Processo de review e testes
+- CI/CD automatizado
+
+### Comandos Úteis
+```bash
+# Desenvolvimento
+npm run dev              # Iniciar servidor de desenvolvimento
+npm run build           # Build de produção
+npm run start           # Iniciar servidor de produção
+
+# Banco de Dados
+npm run db:migrate      # Executar migrações
+npm run db:seed         # Popular banco com dados iniciais
+npm run db:reset        # Resetar banco de dados
+
+# Testes
+npm run test            # Executar testes
+npm run test:watch      # Executar testes em watch mode
+npm run test:coverage   # Executar testes com cobertura
+
+# Linting
+npm run lint            # Verificar linting
+npm run lint:fix        # Corrigir problemas de linting
+```
+
+## 📝 Funcionalidades Principais
+
+### Dashboard de Análise
+- Visualização de dados fiscais em tempo real
+- Gráficos interativos e relatórios personalizados
+- Alertas automáticos para anomalias
+
+### Timeline de Auditoria
+- 8 etapas completas de auditoria fiscal
+- Rastreamento de alterações e histórico
+- Documentação automática de processos
+
+### Engine de Processamento
+- Processamento avançado de arquivos Excel (Verot)
+- Validação automática de dados
+- Geração de relatórios fiscais
+
+### CRM Administrativo
+- Gestão completa de clientes
+- Histórico de interações
+- Automação de processos
+
+### IA Generativa
+- Análise inteligente de documentos fiscais
+- Geração automática de relatórios
+- Assistente virtual para suporte
+
+## 🔐 Segurança
+
+- Autenticação JWT com refresh tokens
+- Criptografia de dados sensíveis
+- Rate limiting e proteção contra ataques
+- Auditoria completa de acessos
+
+## 🚀 Deployment
+
+O projeto está configurado para deployment automático via:
+- **GitHub Actions**: CI/CD completo
+- **Render.com**: Hospedagem de aplicação web
+- **PostgreSQL**: Banco de dados em nuvem
+- **Redis**: Cache distribuído
 
 ## 📄 Licença
 
-Proprietary - Ultra Systems © 2024
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+## 👥 Contribuição
+
+1. Fork o projeto
+2. Crie sua feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+## 📞 Suporte
+
+Para suporte, entre em contato através do email: suporte@ultrasystems.com.br
 
 ---
 
-## 👥 Contato
-
-- **Website**: <https://ultrasystems.com.br>
-- **WhatsApp**: (41) 9 9288-1153
-- **Email**: <contato@ultrasystems.com.br>
-
----
-
-**Desenvolvido com ❤️ pela equipe Ultra Systems**
+**⭐ Se este projeto foi útil para você, considere dar uma estrela no GitHub!**
