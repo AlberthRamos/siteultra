@@ -22,6 +22,9 @@ export class Lead {
     company: string;
 
     @Prop()
+    cnpj?: string;
+
+    @Prop()
     role?: string;
 
     @Prop({ required: true })
