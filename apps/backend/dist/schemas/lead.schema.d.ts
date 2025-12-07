@@ -5,6 +5,7 @@ export declare class Lead {
     email: string;
     phone: string;
     company: string;
+    cnpj?: string;
     role?: string;
     service: string;
     source_page?: string;

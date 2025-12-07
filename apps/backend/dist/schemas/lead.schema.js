@@ -16,6 +16,7 @@ let Lead = class Lead {
     email;
     phone;
     company;
+    cnpj;
     role;
     service;
     source_page;
@@ -43,6 +44,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Lead.prototype, "company", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Lead.prototype, "cnpj", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
